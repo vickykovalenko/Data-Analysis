@@ -1,0 +1,134 @@
+---
+title: "Lab1"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments) 
+```
+```{r}
+library(pacman)
+library(moments)
+```
+### Завантаження даних
+```{r}
+# CSV
+data_csv <- import("/Users/victoria/Documents/weatherAUS.csv")
+```
+### Опис даних
+Датасет містить 10-річні щоденні спостереження погоди з багатьох метеорологічних станцій Австралії. Він містить 23 колонки та 145460 рядків. Джерело: https://www.kaggle.com/jsphyg/weather-dataset-rattle-package
+
+Розглянемо перші рядки датасету:
+```{r}
+head(data_csv)
+```
+Подальші обчислення будемо проводити над змінною MaxTemp - максимальна температура за Цельсієм за добу. Позначимо цю змінну X.
+```{r}
+X <- data_csv$MaxTemp
+head(X)
+```
+Знайдемо середнє значення та медіану:
+```{r}
+mean_max_temp<-mean(X,na.rm = TRUE) # mean
+mean_max_temp
+```
+
+
+```{r}
+median_max_temp<- median(X, na.rm = TRUE)  
+median_max_temp
+```
+Підрахуємо показники варіації: дисперсія, стандартне відхилення, коефіцієнт варіації та інтерквартильний розмах. 
+```{r}
+v<-var(X, na.rm = TRUE)
+v
+```
+```{r}
+sd<-sd(X, na.rm = TRUE) 
+sd
+```
+
+```{r}
+sd/mean_max_temp                    # Coefficient of variation
+```
+
+```{r}
+max(X, na.rm = TRUE)-min(X, na.rm = TRUE) # Range
+```
+
+```{r}
+IQR(X, na.rm = TRUE)    # Interquartile range
+```
+Побудуємо коробковий графік:
+```{r}
+boxplot(X, xlab = "Діаграма температури повітря в Австралії", col="orange")
+```
+
+Знайдемо квартилі:
+```{r}
+quantile(X, na.rm = TRUE) 
+```
+Знайдемо перший та дев'ятий децилі:
+```{r}
+quantile(X, na.rm = TRUE, prob = seq(0, 1, length = 11), type = 5)#Deciles
+```
+Знайдемо коефіцієнт асиметрії та коефіцієнт ексцесу:
+
+```{r}
+skewness(X, na.rm = TRUE)                 # Skewness 
+```
+```{r}
+kurtosis(X, na.rm = TRUE)  
+```
+Побудуємо діаграми, використовуючи різні методи групування(базове правило, правило Скотта, правило Фрідмана-Діаконіса). На цьому ж графіку зобразимо оцінку шільності та графік щільності гіпотетичного розподілу.
+```{r}
+hist(X, breaks=nclass.Sturges, prob=T, right=F, col="azure", xlab="Температура, С", ylab="Щільність", main="Гістограма розподілу температур в Астралії")
+curve(dnorm(x, mean=mean_max_temp, sd=sd), col="red", lwd=2, add=T, yaxt="n")
+```
+```{r}
+hist(X, breaks=nclass.scott, prob=T, right=F, col="azure2", xlab="Температура, С", ylab="Щільність", main="Гістограма розподілу температур в Астралії")
+curve(dnorm(x, mean=mean_max_temp, sd=sd), col="red", lwd=2, add=T, yaxt="n")
+```
+```{r}
+hist(X, breaks=nclass.FD, prob=T, right=F, col="azure2", xlab="Температура, С", ylab="Щільність", main="Гістограма розподілу температур в Астралії")
+curve(dnorm(x, mean=mean_max_temp, sd=sd), col="red", lwd=2, add=T, yaxt="n")
+```
+
+Зобразимо Q-Q діаграму для перевірки узгодженості з гіпотетичним розподілом.
+```{r}
+#Q-Q diagram
+qqnorm(X, xlab="Теоретичні квантилі", ylab="Вибіркові квантилі")
+qqline(X, col="purple")
+```
+
+Зобразимо P-P діаграму для перевірки узгодженості з гіпотетичним розподілом.
+```{r}
+#P-P diagram
+
+X_new <- na.omit(X)
+n=length(X_new)
+PP=data.frame(empiric=(1:n)/n,
+theoretic=pnorm(sort(X_new),mean(X_new, na.rm = TRUE),sd(X_new, na.rm = TRUE)))
+qplot(empiric,theoretic,data=PP)
+
+```
+
+За допомогою статитичного критерію перевіряємо згоду з гіпотетичним розподілом.
+```{r}
+set.seed(23)
+subsample <- sample(X, size=500, replace=TRUE)
+shapiro.test(subsample)
+
+```
+
