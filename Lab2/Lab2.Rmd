@@ -1,0 +1,82 @@
+---
+title: "Lab2"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments, agricolae, corrplot, tidyverse, corrr) 
+```
+```{r}
+library(pacman)
+library(moments)
+library(agricolae)
+library(corrplot)
+library(tidyverse)
+library(corrr)
+```
+### Завантаження даних
+```{r}
+# CSV
+data_csv <- import("/Users/victoria/Documents/StudentsPerformance.csv")
+```
+### Опис даних
+Датасет містить оцінки учнів старшої школи у США. Датасет створений штучно для досліджувальних цілей. Джерело: https://www.kaggle.com/spscientist/students-performance-in-exams
+
+
+```{r}
+head(data_csv)
+```
+Для кількісних даних(math_score, reading_score, writing_score) зобразимо матричну діаграму розсіювання.
+
+```{r}
+pairs(~math_score+reading_score+writing_score, data=data_csv, col="red", pch=10)
+```
+```{r}
+subset_data <- data_csv[,c("math_score", "reading_score", "writing_score")]
+
+```
+
+Виведемо карту кореляцій (кореляційна матриця).
+
+```{r}
+c <- cor(subset_data)
+corrplot.mixed(c)
+```
+
+Граф кореляцій
+
+```{r}
+subset_data %>% correlate() %>% network_plot(min_cor = .7)
+```
+
+Коефіцієнт кореляції Пірсона
+```{r}
+cor.test(subset_data$reading_score, subset_data$writing_score, method="pearson")
+```
+
+
+
+
+Коефіцієнт кореляції Пірсона
+```{r}
+cor.test(subset_data$reading_score, subset_data$math_score, method="pearson")
+
+```
+
+
+
+
+
+
+
