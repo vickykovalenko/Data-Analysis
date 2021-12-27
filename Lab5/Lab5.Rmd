@@ -1,0 +1,249 @@
+---
+title: "Lab5"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+##### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments, agricolae, corrplot, tidyverse, corrr, model4you,
+   Metrics, readxl, MASS, stats, dplyr, quantmod, tidyquant, zoo, TSA, forecast,
+   astsa) 
+```
+```{r}
+library(pacman)
+library(moments)
+library(agricolae)
+library(corrplot)
+library(tidyverse)
+library(corrr)
+library(model4you)
+library(Metrics)
+library(readxl)
+library(MASS)
+library(stats)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(quantmod)
+library(zoo)
+library(forecast)
+library(astsa)
+```
+#### Завантаження даних
+```{r}
+# CSV
+AstraZeneca.daily <- read.csv(
+  "/Users/victoria/Documents/HistoricalPrices2016-2021AstraZeneca.csv", stringsAsFactors = FALSE)
+```
+
+#### 1. Опис даних
+Цей набір даних містить ціни на акції фармацевтичної компанії AstraZeneca з 15.11.2016 по 12.11.2021. Джерело: https://www.wsj.com/market-data/quotes/AZN/historical-prices
+
+Розглянемо перші рядки датасету:
+```{r}
+head(AstraZeneca.daily)
+```
+
+#### 2. Зображення ряду. 
+```{r}
+AstraZeneca.daily$Date <- as.Date(AstraZeneca.daily$Date, format = "%m/%d/%y")
+
+AstraZeneca.daily %>% 
+  ggplot(aes(x=Date,
+             y=Close)) +
+  geom_line()+
+  labs(title="Daily Close Price AstraZeneca",
+       y="Daily Close Price")
+```
+
+#### 3. Проведемо згладжування ряду методом рухомого середнього з різним кроком.
+Візьмемо значення порядку 10, 20, 30.
+
+```{r}
+AstraZeneca.daily %>%
+  mutate(ten_avg= rollmean(Close, 10,
+                             align="left", 
+                             fill=0)) %>%
+  ggplot(aes(x=Date,
+             y=Close)) +
+  geom_line()+
+  geom_line(aes(y = ten_avg), 
+            color = "red", 
+            size = .75)+
+  labs(title="Daily Close Price AstraZeneca with average roll mean 10",
+       y="Daily Close Price")
+```
+```{r}
+AstraZeneca.daily %>%
+  mutate(twenty_avg= rollmean(Close, 20,
+                             align="left", 
+                             fill=0)) %>%
+  ggplot(aes(x=Date,
+             y=Close)) +
+  geom_line()+
+  geom_line(aes(y = twenty_avg), 
+            color = "red", 
+            size = .75)+
+  labs(title="Daily Close Price AstraZeneca with average roll mean 20",
+       y="Daily Close Price")
+```
+
+```{r}
+AstraZeneca.daily %>%
+  mutate(thirty_avg= rollmean(Close, 30,
+                             align="left", 
+                             fill=0)) %>%
+  ggplot(aes(x=Date,
+             y=Close)) +
+  geom_line()+
+  geom_line(aes(y = thirty_avg), 
+            color = "red", 
+            size = .75)+
+  labs(title="Daily Close Price AstraZeneca with average roll mean 30",
+       y="Daily Close Price")
+```
+
+
+### 4. Декомпозиція 
+Зробимо розбиття часового ряду на систематичну, періодичну та хаотичну складові.
+
+```{r}
+#library(zoo)
+#a <- zoo(AstraZeneca.daily$Close, seq(from = as.Date("2016-11-15"), to = as.Date("2021-11-12"), by = 1))
+```
+
+Перетворюємо датасет у часовий ряд:
+```{r}
+minday = as.Date("2016-11-15")
+nts <- ts(AstraZeneca.daily$Close, frequency=275, start=c(year(minday), 
+          as.numeric(format(minday, "%j"))))
+rev_nts = rev(nts)
+rev_nts <- ts(rev_nts, frequency=275, start=c(year(minday), as.numeric(format(minday, "%j"))))
+```
+
+
+Робимо декомпозицію:
+```{r}
+plot(decompose(rev_nts))
+```
+
+### 5. Корелограма та частинна корелограма
+
+Побудуємо корелограму на початковому ЧР:
+```{r}
+acf(rev_nts)
+```
+
+В цьому випадку бачимо високу кореляцію лагів, отже, ряд не є стаціонарним. 
+
+Побудуємо частинну корелограму для початкового ЧР:
+```{r}
+pacf(rev_nts)
+```
+
+
+#### 6. Трансформування ЧР. 
+Як було зазначено вище, в ряді наявний тренд, тому необхідно перетворити його на 
+стаціонарний. (Оскільки неможливо коректно передбачувати ряди з трендом).
+Log-Returns дають нам апроксимацію відносних змін відповідно до попереднього дня
+(стабілізацію дисперсії).
+
+```{r}
+rev_nts <- log(rev_nts)
+ds1 <- 100*diff(rev_nts)
+ds_additional <- diff(ds1)
+
+plot.ts(ds1, main="Log-Returns")
+```
+
+Ще раз застосуємо різницевий оператор: 
+```{r}
+plot.ts(ds_additional, main="Additional Trend Removal Step")
+```
+
+Корелограма для другого диференціювання:
+```{r}
+acf(ds_additional)
+```
+
+Помітна кореляція для лагів 1, 2, 4, 5, 6, 7, 8, 9, 10.
+
+Частинна корелограма:
+```{r}
+pacf(ds_additional)
+```
+
+Кореляція є для лагів з 1 по 8.
+
+Оцінимо параметри моделі авторегресії:
+
+```{r}
+ar(ds_additional, order.max=8)
+```
+
+
+#### 7. Побудова прогнозу
+Оскільки у нас є тренд та немає сезонних компонент, використовуємо подвійне експоненційне згладжування (метод Холта):
+
+Метод експоненційного згладжування (для короткострокових прогнозів):
+```{r}
+HW2 <- HoltWinters(rev_nts, alpha=0.3, beta=0.1, gamma=FALSE)
+p = predict(HW2, 180, prediction.interval = F)
+plot(HW2, p, xlab="Year", ylab="Price",
+main="Прогноз за методом Холта-Вінтерса для цін\n на акції компанії AstraZeneca")
+```
+
+##### Побудуємо методом з групи ARIMA:
+
+Оцінимо якість моделі за допомогою AIC - інформаційний критерій Акаїке: 
+```{r}
+AIC(arima(ds_additional, order = c(8,0,10)))
+```
+
+
+```{r}
+AIC(arima(ds_additional, order = c(1,0,1)))
+```
+
+Оскільки значення функції AIC на наборі (8,0,10) менше, ніж на наборі (1,0,1), використаємо для прогнозу ARIMA перші параметри. 
+
+Метод ARIMA
+
+```{r}
+(fit <- Arima(rev_nts, order=c(8,2,10)))
+```
+
+#### 8. Побудова корелограм залишків
+
+
+Залишки моделі схожі на білий шум: хаотично змінюються навколо середнього значення 0, зі сталою дисперсією, вони некорельовані (корелограма), та приблизно нормально розподілені (Q-Q plot).
+Тест Льюнга-Бокса має високі p-значення для всіх лагів, отже, маємо підстави прийняти основну гіпотезу про одночасну рівність нулю всіх автокореляцій похибок моделі (для всіх лагів одночасно).
+
+
+```{r}
+checkresiduals(fit)
+```
+
+Залишки моделі схожі на білий шум: хаотично змінюються навколо середнього значення 0, зі сталою дисперсією, вони некорельовані (корелограма), та приблизно нормально розподілені. P-value більше за 0.05, отже, приймаємо гіпотезу пронезалежність усіх залишків. 
+
+
+Прогноз:
+```{r}
+autoplot(forecast(fit))
+```
+
+Можливі покращення: брати за принципом економії модель AIC (arima(ds_additional, order = c(1,0,1))),(18 параметрів це забагато, попри те, що AIC менше). Не диференціювати двічі, одного разу достатньо. В arima краще додавати параметр як датасет не диференційований, а тільки прологарифмований (напр., c(1,2,1)). Зменшити розмір вікна для рухомого середнього (30 - це вже забагато).
+
+
+
+

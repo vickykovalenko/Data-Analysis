@@ -1,0 +1,98 @@
+---
+title: "Lab3"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments, agricolae, corrplot, tidyverse, corrr, model4you,
+   Metrics, readxl, MASS, stats) 
+```
+```{r}
+library(pacman)
+library(moments)
+library(agricolae)
+library(corrplot)
+library(tidyverse)
+library(corrr)
+library(model4you)
+library(Metrics)
+library(readxl)
+library(MASS)
+library(stats)
+```
+### Завантаження даних
+```{r}
+# CSV
+data_csv <- import("/Users/victoria/Downloads/kc_house_data.csv")
+```
+### Опис даних
+Цей набір даних містить ціни продажу будинків для округу Кінг, який включає Сіетл. Сюди входять будинки, продані з травня 2014 року по травень 2015 року. Джерело: https://www.kaggle.com/harlfoxem/housesalesprediction
+
+Розглянемо перші рядки датасету:
+```{r}
+head(data_csv)
+```
+Для кількісних даних(EU_Sales, JP_Sales, Other_Sales, Global_Sales, Year) зобразимо матричну діаграму розсіювання.
+
+```{r}
+pairs(~price+bathrooms+sqft_living, data=data_csv, col="red", pch=10)
+```
+
+За графіками бачимо кореляційний зв'язок між величинами, напрклад, bathrooms і sqft_living, і price i sqft_living i price.
+
+Побудуємо відповідну регресійну модель між sqft_living і price та зобразимо на одному графіку з діаграмою розсіювання.
+```{r}
+x <- data_csv$sqft_living
+y <- data_csv$price
+plot(x, y, main="Діаграма розсіювання", xlab="Площа вітальні, кв.фути", ylab="Ціна")
+#b1<-cov(x,y)/var(x) 
+#b0<-mean(y)-b1*mean(x) 
+model<-lm(y~x)
+#rse(y,y-resid(model)) 
+#1-mean((resid(model))^2)/mean((y-mean(y))^2) 
+abline(model, col="blue", lwd=2)
+```
+```{r}
+x <- data_csv$sqft_living
+y <- data_csv$price
+b1<-cov(x,y)/var(x) # slope
+b0<-mean(y)-b1*mean(x) # intercept
+model<-lm(y~x)
+#b0
+#b1
+#rse(y,y-resid(model)) # residual standart error
+#1-mean((resid(model))^2)/mean((y-mean(y))^2) # determination
+
+```
+Побудуємо діаграму "Відгук-прогноз"
+```{r}
+# Response vs prediction plot
+resid<-resid(model) 
+pred<-y-resid
+plot(pred,y,xlab="Прогнозовані значення",ylab="Значення відгуку",main="Діаграма відгук-прогноз")
+abline(0,1, col="red", lwd=2)
+```
+
+Побудуємо діаграму "відгук-залишки"
+```{r}
+# Residuals vs prediction plot 
+plot(pred,resid,xlab="Прогнозовані значення",ylab="Залишки",main="Діаграма прогноз(відгук)-залишки")
+abline(0,0,lwd=1)
+```
+
+Побудуємо Q-Q діаграму для залишків:
+```{r}
+qqnorm(model$residuals, xlab="Теоретичні квантилі",  ylab="Вибіркові квантилі")
+qqline(model$residuals, col="red")
+```

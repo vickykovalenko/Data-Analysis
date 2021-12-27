@@ -1,0 +1,204 @@
+---
+title: "Lab4"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments, agricolae, corrplot, tidyverse, corrr, model4you,
+   Metrics, readxl, MASS, stats, dplyr) 
+```
+```{r}
+library(pacman)
+library(moments)
+library(agricolae)
+library(corrplot)
+library(tidyverse)
+library(corrr)
+library(model4you)
+library(Metrics)
+library(readxl)
+library(MASS)
+library(stats)
+library(dplyr)
+library(ggplot2)
+
+```
+### Завантаження даних
+```{r}
+# CSV
+data_csv <- import("/Users/victoria/Downloads/healthcare-dataset-stroke-data.csv")
+```
+### 1. Опис даних
+Цей набір даних містить дані про характеристики здоров'я людей та передбачення, чи був у них інфаркт.
+
+Розглянемо перші рядки датасету:
+```{r}
+head(data_csv)
+```
+```{r}
+data_csv$work_type = as.factor(data_csv$work_type)
+data_csv<-group_by(data_csv, data_csv$work_type)
+```
+
+
+Для змінної work_type виведемо у вигляді лінійних діаграм значення середнього рівня глюкози в крові по кожній з градацій та значення середніх.
+```{r}
+# stripchart with mean values
+p <- ggplot(data_csv, aes(x=avg_glucose_level, y = work_type)) + geom_jitter(aes(color=work_type)) + 
+labs(title="Plot of work type by average glucose level") + 
+stat_summary(fun=mean, geom="point", shape = 18, size = 3, aes(color="mean glucose level")) +
+scale_color_manual(values=c("tomato", "darkslategray3", "darkorchid4", "darkseagreen4", "grey", "orange"))
+p
+```
+
+### 2. Дисперсійний аналіз
+
+Проведемо дисперсійний аналіз для цих даних. Перевіримо виконання умов ДА: нормальність залишків та гомогенність дисперсій по групах.
+
+Візуальний тест на нормальність:
+```{r}
+ggplot(data_csv, aes(x = avg_glucose_level)) + geom_histogram(binwidth=5) + facet_wrap(~ work_type, ncol = 1)
+```
+Зобразимо Q-Q діаграму для перевірки узгодженості з гіпотетичним розподілом для кожної градації.
+
+```{r}
+library(ggplot2)
+ggplot(data_csv, aes(sample = avg_glucose_level, col = work_type))+
+  geom_qq()+
+  facet_grid( ~ work_type)
+```
+
+
+```{r}
+mod.glucose1 <- aov(avg_glucose_level ~ work_type, data = data_csv)
+hist(mod.glucose1$residuals, breaks = "FD", 
+     main = "Гістограма залишків моделі для рівня глюкози", col = "deepskyblue", freq = F)
+
+```
+
+
+Зобразимо Q-Q діаграму для перевірки узгодженості з гіпотетичним розподілом.
+
+```{r}
+library(ggpubr)
+ggqqplot(mod.glucose1$residuals)
+```
+
+За допомогою статитичного критерію перевіряємо згоду з гіпотетичним розподілом.
+```{r}
+subsample <- sample(mod.glucose1$residuals, size=500, replace=TRUE)
+shapiro.test(subsample)
+```
+Бачимо, що порушена умова нормальності залишків.
+
+Перевірка умови гомогенності дисперсій по групах
+```{r}
+boxplot(avg_glucose_level~work_type, horizontal = FALSE, data = data_csv, xlab = "Average glucose level", ylab = "Work type", varwidth = T, col = "lightblue", cex.lab=0.75, cex.axis=0.75, cex.main=0.75, cex.sub=0.75)
+```
+
+Дисперсії в усіх групах не однакові.
+Перевірка по Бартлету це підтверджує:
+```{r}
+bartlett.test(avg_glucose_level~work_type, data = data_csv)
+```
+
+
+Якщо кожна не розподілена нормально та дисперсії не однакові, можемо використати тест Крускала-Валліса. https://www.statology.org/anova-unequal-sample-size/
+```{r}
+kruskal.test(avg_glucose_level ~ work_type, data = data_csv)
+```
+
+Інтерпретація: Оскільки p-значення менше рівня значущості 0.05, можна зробити висновок, що між групами типу роботи існують значні відмінності.
+
+
+```{r}
+
+# Дисперсійний аналіз з поправкою Велча для випадку порушення умови гомогенності дисперсій (не працює для ненормального розподілу)
+
+oneway.test(avg_glucose_level ~ work_type, data=data_csv)
+```
+```{r}
+# Прологарифмуємо дані та побудуємо нову модель.
+glucose.log <- data_csv
+glucose.log$avg_glucose_level <- log(glucose.log$avg_glucose_level)
+stripchart(avg_glucose_level ~ work_type, data=glucose.log, method = "jitter",
+           col = c("coral", "turquoise", "firebrick", "darkorchid1"),
+           cex.lab=0.5, cex.axis=0.5, cex.main=0.5, cex.sub=0.5)
+mod.glucose.log <- aov(avg_glucose_level ~ work_type, data=glucose.log)
+
+#aov(Butterfat ~ Age, data=butter.log)
+
+#summary(mod.butter.log)
+
+#summary(lm(Butterfat ~ Breed, data=butter.log))
+
+hist(mod.glucose.log$residuals)
+subsample2 <- sample(mod.glucose.log$residuals, size=500, replace=TRUE)
+shapiro.test(subsample2)
+
+
+bartlett.test(avg_glucose_level ~ work_type, data=glucose.log)
+```
+
+
+### 3. Аналіз контрастів
+
+
+```{r}
+model<-lm(avg_glucose_level~work_type, data=data_csv)
+summary(model)
+```
+
+В якості базового рівня автоматично обирається група спостережень для типу роботи children (за алфавітом) – вона відповідає рядку (Intercept) в таблиці результатів аналізу. В цій групі рівень глюкози в крові дорівнює 94.400.
+
+В другому рядку наведено інформацію про різницю між базовим рівнем (children) та типом роботи Govt_job: рівень глюкози суттєво вищий (Pr(>|t|), ніж в типі роботи Children (в середньому на 13.379, ніж в групі children).
+
+В групі Never_worked між базовим рівнем різниця на 1.642, але це збільшення не було статистично значущим (Pr(>|t|) = 0.866).
+
+
+Побудуємо матрицю контрастів для факторів:
+```{r}
+contrasts(data_csv$work_type)
+```
+
+Це приклад матриці, що містить вагові коефіцієнти контрастів комбінацій умов (відносно базового рівня; середнєзначення n-го рівня мінус середнє значення базового рівня).
+
+
+Контрасти сум:
+```{r}
+contrasts(data_csv$work_type)<-contr.sum(n=5)
+contrasts(data_csv$work_type)
+```
+
+
+Базовий рівень, з яким порівнюються інші рівні, представляє собою середнє значення з середніх по кожній групі.
+
+Знову побудуємо лінійну модель:
+
+```{r}
+model2<-lm(avg_glucose_level~work_type, data=data_csv)
+summary(model2)
+```
+
+Тепер перший рядок в таблиці з результатами аналізу (Intercept) містить середнє значення рівня глюкози, підраховане по середніх значеннях кожного типу роботи (загальне середнє).
+Далі - наскільки середні значення кожної групи відрізняються від загального середнього. 
+
+ANOVA застосувати не можемо, оскільки маємо суттєві відхилення від нормальності.
+```{r}
+#mod.glucose1 <- aov(avg_glucose_level ~ work_type, data = data_csv)
+#summary(mod.glucose1)
+
+#model<-lm(avg_glucose_level~work_type, data=data_csv)
+#summary(model)
+```

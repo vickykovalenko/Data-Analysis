@@ -1,0 +1,277 @@
+---
+title: "Lab6"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+---
+
+##### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, rio, rmarkdown, moments, agricolae, corrplot, tidyverse, corrr, model4you,
+   Metrics, readxl, cluster, factoextra, magrittr, cluster, fossil)
+```
+```{r}
+library(pacman)
+library(moments)
+library(agricolae)
+library(corrplot)
+library(tidyverse)
+library(corrr)
+library(model4you)
+library(Metrics)
+library(readxl)
+library(cluster)
+library(factoextra)
+library(magrittr)
+library(ggplot2)
+library(plotly)
+library(cluster)
+library(fossil)
+library(NbClust)
+```
+
+#### Завантаження даних
+
+```{r}
+# CSV
+wine_data <- read.csv("/Users/victoria/Documents/wine-clustering.csv")
+```
+
+#### 1. Опис даних
+
+Цей набір даних містить результати хімічного аналізу вин з винограду одного регіону Італії, але з різних видів сортів. Аналіз визначив кількість 13 складових, виявлених у кожному із трьох типів вин. До цих компонентів належать: алкоголь, яблучна кислота, 
+зола, лужність золи, магній, загальна кількість фенолів, флаваноїди,нефлаваноїдні феноли, проантоціани, інтенсивність кольору, відтінок, OD280/OD315 розведених вин, пролін. Джерело: https://www.kaggle.com/harrywang/wine-dataset-for-clustering.
+
+Розглянемо перші рядки датасету:
+```{r}
+head(wine_data)
+```
+
+#### 2. Кластерний аналіз
+
+Перевірка на наявність NA даних:
+```{r}
+sum(is.na(wine_data))
+```
+
+Стандартизація:
+```{r}
+wine_data <- scale(wine_data)
+head(wine_data)
+```
+
+2.1 Використаємо k-means спочатку для 2 кластерів:
+
+```{r}
+k2 <- kmeans(wine_data, centers = 2, nstart = 25)
+fviz_cluster(k2, palette = "jco", data = wine_data, ggtheme = theme_minimal())
+```
+
+2.2 Використаємо PAM спочатку для 2 кластерів:
+
+```{r}
+pam.res <- pam(wine_data, 2)
+# Visualize
+fviz_cluster(pam.res, palette = "uchicago", ggtheme = theme_minimal())
+```
+
+2.3 Ієрархічний аналіз.
+
+Випробуємо усі представлені в R методи, а потім визначимо, який із них дає
+найкращий результат. 
+
+```{r}
+res.dist = dist(wine_data, method="euclidean")
+res.ctr = hclust(d=res.dist, method="centroid")
+plot(res.ctr, main="Centroid method")
+res.coph = cophenetic(res.ctr)
+cor(res.dist, res.coph)
+```
+
+```{r}
+set.seed(100)
+res.med = hclust(d=res.dist, method="median")
+plot(res.med, main="Median method")
+res.coph = cophenetic(res.med)
+cor(res.dist, res.coph)
+```
+
+```{r}
+set.seed(123)
+res.wrd2 = hclust(d=res.dist, method="ward.D2")
+plot(res.wrd2, main="Ward's method")
+res.coph = cophenetic(res.wrd2)
+cor(res.dist, res.coph)
+```
+
+```{r}
+res.avg = hclust(d=res.dist, method="average")
+plot(res.avg, main="Average linkage")
+res.coph = cophenetic(res.avg)
+cor(res.dist, res.coph)
+```
+
+
+```{r}
+res.sgl = hclust(d=res.dist, method="single")
+plot(res.sgl, main="Single linkage (nearest neighbor) method")
+res.coph = cophenetic(res.sgl)
+cor(res.dist, res.coph)
+```
+
+
+```{r}
+res.cpl = hclust(d=res.dist, method="complete")
+plot(res.cpl, main="Complete linkage (furthest neighbor) method")
+res.coph = cophenetic(res.cpl)
+cor(res.dist, res.coph)
+```
+
+```{r}
+res.mcq = hclust(d = res.dist, method = "mcquitty")
+plot(res.mcq, main="McQuitty method")
+res.coph = cophenetic(res.mcq)
+cor(res.dist, res.coph)
+```
+
+З дендрограм ми можемо побачити, що умовно оптимальна
+кількість кластерів – 3.
+Найкраще значення кореляції досягається для методу Average Linkage.
+Попри те, що кореляція для Ward's method і Complete linkage (furthest neighbor) method нижча, ми включимо отриманий за ними результат до подальшого розгляду і після порівняння за необхідності вилучимо.
+
+
+#### 3. Оптимальна кількість кластерів:
+3.1 Метод ліктя (elbow method):
+
+```{r}
+library(NbClust)
+
+fviz_nbclust(wine_data, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2) + # add line for better visualisation
+  labs(subtitle = "Метод ліктя") # add subtitle
+```
+
+3.2 Метод середнього силуету (Average Silhouette Method):
+
+```{r}
+# Метод середнього силуету (Silhouette method)
+fviz_nbclust(wine_data, kmeans, method = "silhouette") +
+  labs(subtitle = "Метод середнього силуету")
+```
+
+
+3.3 Gap-статистика:
+```{r}
+# compute gap statistic
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization
+set.seed(123)
+gap_stat <- clusGap(wine_data, FUN = kmeans, nstart = 25,
+                    K.max = 10, B = 50)
+```
+
+```{r}
+fviz_gap_stat(gap_stat)
+```
+
+Оскільки більшість методів пропонують 3 як кількість оптимальних кластерів, ми можемо провести остаточний аналіз і отримати результати, використовуючи 3 кластери.
+
+
+#### 4. Зображення результатів кластеризації
+
+
+4.1 K-means
+```{r}
+# Compute k-means clustering with k = 3
+set.seed(123)
+final_kmeans3 <- kmeans(wine_data, 3, nstart = 25)
+
+fviz_cluster(final_kmeans3, data = wine_data,
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal())
+```
+
+4.2 Метод k-медоїдів:
+
+```{r}
+final_pam3 <- pam(wine_data, 3)
+# Visualize
+fviz_cluster(final_pam3, palette = "uchicago", ggtheme = theme_minimal())
+```
+
+
+4.3 Ієрархічний аналіз
+```{r}
+cut_wrd2 = cutree(res.wrd2, k=3)
+plot(res.wrd2, main="Ward's method")
+rect.hclust(res.wrd2, k=3, border=2:6)
+fviz_cluster(list(data=wine_data, cluster=cut_wrd2),
+             ggtheme=theme_minimal())
+```
+
+
+```{r}
+cut_cpl = cutree(res.cpl, k=3)
+plot(res.cpl, main="Complete linkage (furthest neighbor) method")
+rect.hclust(res.cpl , k=3, border=2:6)
+fviz_cluster(list(data=wine_data, cluster=cut_cpl),
+             ggtheme=theme_minimal())
+```
+
+
+```{r}
+cut_avg = cutree(res.avg, k=3)
+plot(res.avg, main="Average linkage")
+rect.hclust(res.avg , k=3, border=2:6)
+fviz_cluster(list(data=wine_data, cluster=cut_avg),
+             ggtheme=theme_minimal())
+```
+
+
+
+#### 5. Індекс Ренда.
+
+Введемо стовпчик з категоріальною змінною (джерело датасету з категоріальною змінною: https://gist.github.com/tijptjik/9408623).
+```{r}
+true_label = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+3, 3, 3, 3, 3, 3, 3, 3, 3)
+
+
+rand.index(true_label, cut_wrd2)
+rand.index(true_label, cut_cpl)
+rand.index(true_label, cut_avg)
+```
+
+
+#### 6. Остаточний варіант кластеризації
+
+Обираємо варіант з Ward's method, оскільки у нього найвищий індекс Ренда.
+```{r}
+fviz_cluster(list(data=wine_data, cluster=cut_wrd2),
+             ggtheme=theme_minimal())
+```
+
+
+Можливий варіант покращення: зобразити графік кластеризації у тривимірному, а не двомірному просторі (оскільки перша компонента важить 36.2 відсотків, а друга 19.2, значить ще інші компоненти мають досить багато ваги).

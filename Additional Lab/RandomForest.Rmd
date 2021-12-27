@@ -1,0 +1,174 @@
+---
+title: "Random Forest"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+  word_document: default
+---
+
+##### Завантаження пакетів
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+```
+
+```{r load-packages, message=FALSE}
+pacman::p_load(pacman, ggplot2, 
+   plotly, corrr, caret, randomForest, corrplot)
+```
+
+
+```{r}
+library(pacman)
+library(caret) 
+library(randomForest)
+library(ggplot2)
+library(corrplot)
+library(corrr)
+
+```
+
+#### Завантаження даних
+
+```{r}
+data <- read.csv("bodyPerformance.csv")
+```
+
+#### 1. Опис даних
+
+Це дані, які підтверджують оцінку працездатності з віком і деякі дані про результативність фізичної підготовки. Дани зібрані Корейським фондом підтримки спорту. Джерело: https://www.kaggle.com/kukuroo3/body-performance-data.
+
+Розглянемо перші рядки датасету:
+```{r}
+head(data)
+```
+
+Перевірка на наявність NA даних:
+```{r}
+colSums(is.na(data))
+```
+
+Переглянемо тип даних кожної колонки датасету:
+```{r}
+sapply(data, class)
+```
+
+
+Сконвертуємо змінні gender та class на факторні:
+
+```{r}
+# Converting ‘gender’ and 'class' to a factor
+data$gender <- factor(data$gender)
+data$class <- factor(data$class)
+```
+
+
+Розділимо датасет на тренувальний та тестовий:
+```{r}
+set.seed(123)
+
+samp <- sample(nrow(data), 0.8 * nrow(data))
+
+train <- data[samp, ]
+test <- data[-samp, ]
+dim(train)
+dim(test)
+#drop <- c("class")
+#test2 <- test[,!(names(test) %in% drop)]
+```
+
+
+
+
+Оскільки алгоритм випадкового лісу не чутливий до різних по масштабу даних, стандартизацію (scaling) не проводимо.
+
+Використовуємо перехресну перевірку для знаходження оптимального значення mtry:
+```{r}
+set.seed(51)
+# Training using ‘random forest’ algorithm
+model <- train(class ~ ., 
+data = train, # Use the train data frame as the training data
+method = 'rf',# Use the 'random forest' algorithm
+trControl = trainControl(method = 'cv', # Use cross-validation
+number = 5)) # Use 5 folds for cross-validation
+model
+```
+
+
+Використовуючу значення mtry = 6, побудуємо модель на основі випадкового лісу:
+```{r}
+set.seed(71)
+model <- randomForest(class ~ ., data = train, ntree = 500, mtry= 6)
+model
+```
+
+
+```{r}
+plot(model)
+```
+
+Розглянемо міри важливості регресорів (середнє падіння індекса Джинні):
+```{r}
+importance(model)
+varImpPlot(model)
+```
+
+
+
+Перевіримо модель на тестових даних:
+```{r}
+prediction <- predict(model, test[-12])
+```
+
+
+Оскільки це задача класифікації, побудуємо матрицю невідповіднестей (confusion matrix):
+```{r}
+table(prediction, test$class)
+```
+
+Обчислимо точність передбачення:
+```{r}
+sum(prediction==test$class) / nrow(test) 
+```
+
+
+Можливі покращенння: grid search, random search, викинути деякі змінні, що не впливають на target value (class).
+
+
+
+
+
+
+```{r}
+#set.seed(1234)
+#tuneGrid <- expand.grid(.mtry = c(1: 10))
+#rf_mtry <- train(class~.,
+#data = train,
+#method = "rf",
+#metric = "Accuracy",
+#tuneGrid = tuneGrid,
+#trControl = trainControl(),
+#importance = TRUE,
+#nodesize = 14,
+#ntree = 500)
+#print(rf_mtry)
+```
+
+
+
+```{r}
+# hyperparameter grid search
+#hyper_grid <- expand.grid(
+#  mtry       = seq(20, 30, by = 2),
+#  node_size  = seq(3, 9, by = 2),
+#  sampe_size = c(.55, .632, .70, .80),
+#  OOB_RMSE   = 0
+#)
+
+# total number of combinations
+#nrow(hyper_grid)
+```
+
